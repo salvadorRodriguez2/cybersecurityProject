@@ -2,7 +2,10 @@
 This is the repo for the JWKS server project.
 
 ## Test Coverage
+<img width="2077" height="859" alt="image" src="https://github.com/user-attachments/assets/e09da331-95a8-415d-aac1-de03e64407f2" />
 
+## Gradebot
+<img width="1630" height="909" alt="image" src="https://github.com/user-attachments/assets/a24ee3bf-4647-4347-b62b-e771f5399c31" />
 
 ## Document Linting
 After running flake8, I was able to remove all the errors except for the ones talking about some lines being too long.  
