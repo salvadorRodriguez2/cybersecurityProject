@@ -13,3 +13,7 @@ Thumbs.db
 
 # VS Code
 .vscode/
+
+# Coverage
+.coverage
+htmlcov/
