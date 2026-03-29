@@ -2,7 +2,7 @@
 This is the repo for the JWKS server project.
 
 ## Test Coverage
-
+<img width="1088" height="245" alt="image" src="https://github.com/user-attachments/assets/3ab4f8fd-650f-4b12-83b0-9c16b7079d23" />
 
 ## Document Linting
 After running flake8, I was able to remove all the errors except for the ones talking about some lines being too long.  
