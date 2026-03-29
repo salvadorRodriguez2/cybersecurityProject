@@ -1,15 +1,14 @@
-'''
-    How to run:
-    1. Ensure python is installed:      python --version
-    2. Start virtual environment:       python3 -m venv venv
-    3. Activate virtual environment:    .\venv\Scripts\activate
-    4. Install dependencies:            pip install -r requirements.txt
-    5. Run server:                      python3 main.py
-
-    How to test if the server is running:
-    1. Get public keys:                 curl.exe http://localhost:8080/.well-known/jwks.json
-    2. Request a JWT Token:             curl.exe -X POST http://localhost:8080/auth (doesn't work)
-'''
+#    How to run:
+#    1. Ensure python is installed:      python --version
+#    2. Start virtual environment:       python3 -m venv venv
+#    3. Activate virtual environment:    .\venv\Scripts\activate
+#    4. Install dependencies:            pip install -r requirements.txt
+#    5. Run server:                      python3 main.py
+#
+#    How to test if the server is running:
+#    1. Get public keys:                 curl.exe http://localhost:8080/.well-known/jwks.json
+#    2. Request a JWT Token:             curl.exe -X POST http://localhost:8080/auth
+                                                                                     
 # PROVIDED CODE #
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from cryptography.hazmat.primitives import serialization
@@ -19,6 +18,25 @@ import base64
 import json
 import jwt
 import datetime
+
+### My Code ###
+import sqlite3      # Library for SQLite
+
+# Creating database if not already created
+conn = sqlite3.connect("totally_not_my_privateKeys.db") # Creating and opening the file if it does not exist
+cursor = conn.cursor()                                  # Creating a cursor to execute SQLite functions
+
+# Table Schema provided by Canvas
+cursor.execute("""
+    CREATE TABLE IF NOT EXISTS keys(
+        kid INTEGER PRIMARY KEY AUTOINCREMENT,
+        key BLOB NOT NULL,
+        exp INTEGER NOT NULL
+    )
+""")
+
+# Saving the changes and closing the connection come later to reduce reopening and reclosing
+### End of my code ###
 
 hostName = "localhost"
 serverPort = 8080
@@ -45,6 +63,20 @@ expired_pem = expired_key.private_bytes(
 
 numbers = private_key.private_numbers()
 
+### My Code ###
+
+cursor.execute("INSERT INTO keys (key, exp) VALUES (?, ?)",                                     # Using SQLite INSERT command to add entries
+               (pem.decode('utf-8'),                                                            # This is the serialized key using the pem above
+                int((datetime.datetime.utcnow() + datetime.timedelta(hours=1)).timestamp())))   # This is the time now + 1 hour = expiry time
+
+cursor.execute("INSERT INTO keys (key, exp) VALUES (?, ?)",                                     # Using SQLITE INSERT again for same reason
+               (expired_pem.decode('utf-8'),                                                    # This time using the expired_pem from above for expired key
+                int((datetime.datetime.utcnow() - datetime.timedelta(hours=1)).timestamp())))   # Rather than have time + 1 hour = expiry, we have time - 1 = expired
+
+conn.commit()       # Saving changes
+conn.close()        # Closing connection
+
+### End of my code ###
 
 def int_to_base64(value):
     """Convert an integer to a Base64URL-encoded string"""
