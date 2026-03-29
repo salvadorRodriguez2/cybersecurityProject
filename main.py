@@ -21,6 +21,7 @@ import datetime
 
 ### My Code ###
 import sqlite3      # Library for SQLite
+from cryptography.hazmat.primitives.serialization import load_pem_private_key   # Importing deserialization for later
 
 # Creating database if not already created
 conn = sqlite3.connect("totally_not_my_privateKeys.db") # Creating and opening the file if it does not exist
@@ -64,18 +65,19 @@ expired_pem = expired_key.private_bytes(
 numbers = private_key.private_numbers()
 
 ### My Code ###
+timePlusOneHour = int((datetime.datetime.utcnow() + datetime.timedelta(hours=1)).timestamp())
+timeMinusOneHour = int((datetime.datetime.utcnow() - datetime.timedelta(hours=1)).timestamp())
 
-cursor.execute("INSERT INTO keys (key, exp) VALUES (?, ?)",                                     # Using SQLite INSERT command to add entries
-               (pem.decode('utf-8'),                                                            # This is the serialized key using the pem above
-                int((datetime.datetime.utcnow() + datetime.timedelta(hours=1)).timestamp())))   # This is the time now + 1 hour = expiry time
+cursor.execute("INSERT INTO keys (key, exp) VALUES (?, ?)",     # Using SQLite INSERT command to add entries
+               (pem.decode('utf-8'),                            # This is the serialized key using the pem above
+                timePlusOneHour))                               # This is the time now + 1 hour = expiry time
 
-cursor.execute("INSERT INTO keys (key, exp) VALUES (?, ?)",                                     # Using SQLITE INSERT again for same reason
-               (expired_pem.decode('utf-8'),                                                    # This time using the expired_pem from above for expired key
-                int((datetime.datetime.utcnow() - datetime.timedelta(hours=1)).timestamp())))   # Rather than have time + 1 hour = expiry, we have time - 1 = expired
+cursor.execute("INSERT INTO keys (key, exp) VALUES (?, ?)",     # Using SQLITE INSERT again for same reason
+               (expired_pem.decode('utf-8'),                    # This time using the expired_pem from above for expired key
+                timeMinusOneHour))                              # Rather than have time + 1 hour = expiry, we have time - 1 = expired
 
 conn.commit()       # Saving changes
 conn.close()        # Closing connection
-
 ### End of my code ###
 
 def int_to_base64(value):
@@ -111,28 +113,58 @@ class MyServer(BaseHTTPRequestHandler):
         return
 
     def do_POST(self):
+        ### My Code ###
+        # Handling request body 
+        content_length = int(self.headers.get('Content Length', 0))
+        _ = self.rfile.read(content_length)
+
         parsed_path = urlparse(self.path)
         params = parse_qs(parsed_path.query)
+
         if parsed_path.path == "/auth":
-            headers = {
-                "kid": "goodKID"
-            }
+            conn = sqlite3.connect("totally_not_my_privateKeys.db") # Opening our connection again
+            cursor = conn.cursor()                                  # Getting our executor 
+            timeNow = int(datetime.datetime.utcnow().timestamp())   # Making a variable to make code cleaner
+            
+            if 'expired' in params:
+                cursor.execute("SELECT kid, key FROM keys WHERE exp <= ? LIMIT 1", (timeNow,))  # Query for expired key
+            else:
+                cursor.execute("SELECT kid, key FROM keys WHERE exp > ? LIMIT 1", (timeNow,))   # Query for valid key
+    
+            # Fetch for result with error handling if nothing is found
+            row = cursor.fetchone()
+            conn.close()
+        
+            if row is None:
+                self.send_response(404)
+                self.end_headers()
+                return
+        
+            # Deserialize the key from startup
+            kid = row[0]
+            key_pem = row[1].encode('utf-8')
+            private_key = load_pem_private_key(key_pem, password=None)
+
+            # Build JWT from database
             token_payload = {
                 "user": "username",
-                "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=1)
+                "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=1) 
             }
+
             if 'expired' in params:
-                headers["kid"] = "expiredKID"
                 token_payload["exp"] = datetime.datetime.utcnow() - datetime.timedelta(hours=1)
-            encoded_jwt = jwt.encode(token_payload, pem, algorithm="RS256", headers=headers)
+
+            encoded_jwt = jwt.encode(token_payload, private_key, algorithm="RS256", headers={"kid": str(kid)})
+            
             self.send_response(200)
             self.end_headers()
             self.wfile.write(bytes(encoded_jwt, "utf-8"))
             return
-
+        
         self.send_response(405)
         self.end_headers()
         return
+        ### End of my code ###
 
     def do_GET(self):
         if self.path == "/.well-known/jwks.json":
